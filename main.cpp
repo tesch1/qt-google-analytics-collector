@@ -11,6 +11,7 @@ int main(int argc, char * argv[])
   QCoreApplication::setApplicationName("ganalytics");
   QCoreApplication::setApplicationVersion("0.0.1");
 
+  // create and store a new client id
   QSettings settings;
   if (!settings.contains("cid")) {
     settings.setValue("cid", QUuid::createUuid().toString());
@@ -18,6 +19,7 @@ int main(int argc, char * argv[])
 
   GAnalytics analytics(/*"UA-00000000-0"*/, settings.value("cid").toString().toStdString());
   //GAnalytics analytics("UA-00000000-0", settings.value("cid").toString().toStdString()); // DO NOT USE
+  analytics.generateUserAgentEtc();
   analytics.sendPageview("mydemo.com", "/home", "homepage");
 
   a.exec();
