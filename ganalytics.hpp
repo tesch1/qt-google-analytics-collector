@@ -54,8 +54,8 @@ class GAnalytics : public QObject {
 private:
   typedef std::map<QNetworkReply *, bool> reply_map;
 public:
-  GAnalytics(std::string trackingID,
-             std::string clientID = "",
+  GAnalytics(QString trackingID,
+             QString clientID = "",
              bool useGET = false)
     : _qnam(this), _trackingID(trackingID), _clientID(clientID), _useGET(useGET), _isFail(false)
   {
@@ -91,11 +91,11 @@ public:
 #endif
   }
   // manual ip and user agent
-  void setClientID(std::string clientID) { _clientID = clientID; }
-  void setUserIPAddr(std::string userIPAddr) { _userIPAddr = userIPAddr; }
-  void setUserAgent(std::string userAgent) { _userAgent = userAgent; }
-  void setAppName(std::string appName) { _appName = appName; }
-  std::string getClientID() const { return _clientID; }
+  void setClientID(QString clientID) { _clientID = clientID; }
+  void setUserIPAddr(QString userIPAddr) { _userIPAddr = userIPAddr; }
+  void setUserAgent(QString userAgent) { _userAgent = userAgent; }
+  void setAppName(QString appName) { _appName = appName; }
+  QString getClientID() const { return _clientID; }
   //
   // hit types
   //
@@ -105,55 +105,55 @@ public:
 public Q_SLOTS:
 
   // pageview
-  void sendPageview(std::string docHostname, std::string page, std::string title) const {
+  void sendPageview(QString docHostname, QString page, QString title) const {
     QUrl params = build_metric("pageview");
-    params.addQueryItem("dh", docHostname.c_str() );    // document hostname
-    params.addQueryItem("dp", page.c_str());            // page
-    params.addQueryItem("dt", title.c_str());           // title
+    params.addQueryItem("dh", docHostname);    // document hostname
+    params.addQueryItem("dp", page);            // page
+    params.addQueryItem("dt", title);           // title
     send_metric(params);
   }
 
   // event
-  void sendEvent(std::string eventCategory = "", std::string eventAction = "", 
-                 std::string eventLabel = "", std::string eventValue = "") const {
+  void sendEvent(QString eventCategory = "", QString eventAction = "", 
+                 QString eventLabel = "", int eventValue = 0) const {
     QUrl params = build_metric("event");
-    if (_appName.size()) params.addQueryItem("an", _appName.c_str()); // mobile event app tracking
-    if (eventCategory.size()) params.addQueryItem("ec", eventCategory.c_str());
-    if (eventAction.size()) params.addQueryItem("ea", eventAction.c_str());
-    if (eventLabel.size()) params.addQueryItem("el", eventLabel.c_str());
-    if (eventValue.size()) params.addQueryItem("ev", eventValue.c_str());
+    if (_appName.size()) params.addQueryItem("an", _appName); // mobile event app tracking
+    if (eventCategory.size()) params.addQueryItem("ec", eventCategory);
+    if (eventAction.size()) params.addQueryItem("ea", eventAction);
+    if (eventLabel.size()) params.addQueryItem("el", eventLabel);
+    if (eventValue) params.addQueryItem("ev", QString::number(eventValue));
     send_metric(params);
   }
 
   // transaction
-  void sendTransaction(std::string transactionID, std::string transactionAffiliation = "" /*...todo...*/) const {
+  void sendTransaction(QString transactionID, QString transactionAffiliation = "" /*...todo...*/) const {
     QUrl params = build_metric("transaction");
-    params.addQueryItem("ti", transactionID.c_str());
-    if (transactionAffiliation.size()) params.addQueryItem("ta", transactionAffiliation.c_str());
+    params.addQueryItem("ti", transactionID);
+    if (transactionAffiliation.size()) params.addQueryItem("ta", transactionAffiliation);
     send_metric(params);
   }
 
   // item
-  void sendItem(std::string itemName) const {
+  void sendItem(QString itemName) const {
     QUrl params = build_metric("item");
-    params.addQueryItem("in", itemName.c_str());
-    //if (appName.size()) params.addQueryItem("an", appName.c_str());
+    params.addQueryItem("in", itemName);
+    //if (appName.size()) params.addQueryItem("an", appName);
     send_metric(params);
   }
 
   // social
-  void sendSocial(std::string socialNetwork, std::string socialAction, std::string socialActionTarget) const {
+  void sendSocial(QString socialNetwork, QString socialAction, QString socialActionTarget) const {
     QUrl params = build_metric("social");
-    params.addQueryItem("sn", socialNetwork.c_str());
-    params.addQueryItem("sa", socialAction.c_str());
-    params.addQueryItem("st", socialActionTarget.c_str());
+    params.addQueryItem("sn", socialNetwork);
+    params.addQueryItem("sa", socialAction);
+    params.addQueryItem("st", socialActionTarget);
     send_metric(params);
   }
 
   // exception
-  void sendException(std::string exceptionDescription, bool exceptionFatal = true) const {
+  void sendException(QString exceptionDescription, bool exceptionFatal = true) const {
     QUrl params = build_metric("exception");
-    if (exceptionDescription.size()) params.addQueryItem("exd", exceptionDescription.c_str());
+    if (exceptionDescription.size()) params.addQueryItem("exd", exceptionDescription);
     if (!exceptionFatal) params.addQueryItem("exf", "0");
     send_metric(params);
   }
@@ -161,14 +161,14 @@ public Q_SLOTS:
   // timing
   void sendTiming(/* todo */) const {
     QUrl params = build_metric("timing");
-    //if (appName.size()) params.addQueryItem("an", appName.c_str());
+    //if (appName.size()) params.addQueryItem("an", appName);
     send_metric(params);
   }
 
   // appview
-  void sendAppview(std::string appName, std::string appVersion = "", std::string screenName = "") const {
+  void sendAppview(QString appName, QString appVersion = "", QString screenName = "") const {
     QUrl params = build_metric("appview");
-    if (!_appName.size()) params.addQueryItem("an", appName.c_str());
+    if (!_appName.size()) params.addQueryItem("an", appName);
     send_metric(params);
   }
 
@@ -189,14 +189,14 @@ public:
 
   void generateUserAgentEtc() {
     QString system = QLocale::system().name().toLower().replace("_", "-");
-    _userAgent = "Mozilla/5.0 (" + system.toStdString() + ")";
+    _userAgent = "Mozilla/5.0 (" + system + ")";
     QNetworkRequest req;
-    qDebug() << "User-Agent:" << req.rawHeader("User-Agent").constData() << "->" << _userAgent.c_str();
+    qDebug() << "User-Agent:" << req.rawHeader("User-Agent").constData() << "->" << _userAgent;
 
 #ifdef QT_GUI_LIB
     QString geom = QString::number(QApplication::desktop()->screenGeometry().width()) 
       + "x" + QString::number(QApplication::desktop()->screenGeometry().height());
-    _screenResolution = geom.toStdString();
+    _screenResolution = geom;
 #endif
   }
 
@@ -221,21 +221,21 @@ private Q_SLOTS:
 
 private:
   GAnalytics(const GAnalytics &); // disable copy const constructor
-  QUrl build_metric(std::string hitType) const {
+  QUrl build_metric(QString hitType) const {
     QUrl params;
     // required in v1
     params.addQueryItem("v", "1" ); // version
-    params.addQueryItem("tid", _trackingID.c_str());
-    params.addQueryItem("cid", _clientID.c_str());
-    params.addQueryItem("t", hitType.c_str());
+    params.addQueryItem("tid", _trackingID);
+    params.addQueryItem("cid", _clientID);
+    params.addQueryItem("t", hitType);
     if (_userIPAddr.size())
-      params.addQueryItem("uip", _userIPAddr.c_str());
+      params.addQueryItem("uip", _userIPAddr);
     if (_screenResolution.size())
-      params.addQueryItem("sr", _screenResolution.c_str());
+      params.addQueryItem("sr", _screenResolution);
     if (_viewportSize.size())
-      params.addQueryItem("vp", _viewportSize.c_str());
+      params.addQueryItem("vp", _viewportSize);
     //if (_userAgent.size())
-    //  params.addQueryItem("ua", _userAgent.c_str());
+    //  params.addQueryItem("ua", _userAgent);
     return params;
   }
   void send_metric(QUrl & params) const {
@@ -245,7 +245,7 @@ private:
     QUrl collect_url("http://www.google-analytics.com/collect");
     QNetworkRequest request;
     if (_userAgent.size())
-      request.setRawHeader("User-Agent", _userAgent.c_str());
+      request.setRawHeader("User-Agent", _userAgent.toUtf8());
     QNetworkReply * reply;
     if (_useGET) {
       // add cache-buster "z" to params
@@ -264,33 +264,33 @@ private:
     _replies[reply] = true;
   }
   mutable QNetworkAccessManager _qnam;
-  std::string _trackingID;
-  std::string _clientID;
+  QString _trackingID;
+  QString _clientID;
   bool _useGET; // true=GET, false=POST
-  std::string _userID;
+  QString _userID;
 
   // various parameters:
   bool _anonymizeIP;
   bool _cacheBust;
   //
-  std::string _userIPAddr;
-  std::string _userAgent;
-  std::string _appName;
+  QString _userIPAddr;
+  QString _userAgent;
+  QString _appName;
 #if 0 // todo
   // traffic sources
-  std::string _documentReferrer;
-  std::string _campaignName;
-  std::string _campaignSource;
-  std::string _campaignMedium;
-  std::string _campaignKeyword;
-  std::string _campaignContent;
-  std::string _campaignID;
-  std::string _adwordsID;
-  std::string _displayAdsID;
+  QString _documentReferrer;
+  QString _campaignName;
+  QString _campaignSource;
+  QString _campaignMedium;
+  QString _campaignKeyword;
+  QString _campaignContent;
+  QString _campaignID;
+  QString _adwordsID;
+  QString _displayAdsID;
 #endif
   // system info
-  std::string _screenResolution;
-  std::string _viewportSize;
+  QString _screenResolution;
+  QString _viewportSize;
   // etc...
 
   // internal
