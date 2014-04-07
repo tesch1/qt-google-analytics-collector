@@ -24,7 +24,7 @@ int main(int argc, char * argv[])
   GAnalytics analytics(argv[1] /*"UA-00000000-0"*/, settings.value("cid").toString());
   //analytics.generateUserAgentEtc();
   //analytics.sendPageview(std::string docHostname, std::string page, std::string title);
-  //analytics.sendPageview("mydemo.com", "/home", "homepage");
+  analytics.sendPageview("mydemo.com", "/home", "homepage");
   analytics.setAppName("ganalytics-demo");
   analytics.sendEvent("event category 1", "event action 1", "event label 1", 1);
   //analytics.sendTransaction(std::string transactionID, std::string transactionAffiliation = "" /*...todo...*/);

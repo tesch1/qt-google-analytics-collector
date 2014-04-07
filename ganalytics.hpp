@@ -168,7 +168,12 @@ public Q_SLOTS:
   // appview
   void sendAppview(QString appName, QString appVersion = "", QString screenName = "") const {
     QUrl params = build_metric("appview");
-    if (!_appName.size()) params.addQueryItem("an", appName);
+    if (_appName.size())
+      params.addQueryItem("an", _appName); // mobile event app tracking
+    else if (!_appName.size())
+      params.addQueryItem("an", appName);
+    if (appVersion.size()) params.addQueryItem("av", appVersion);
+    if (screenName.size()) params.addQueryItem("cd", screenName);
     send_metric(params);
   }
 
