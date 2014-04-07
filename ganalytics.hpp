@@ -64,7 +64,6 @@ public:
       qDebug() << "error: network inaccessible\n";
   }
   ~GAnalytics() {
-    _eventLoop.processEvents();
     // wait up to half a second to let replies finish up
     for (int ii = 0; ii < 100; ii++) {
       bool unfinished = false;
@@ -77,7 +76,8 @@ public:
       }
       if (!unfinished)
         break;
-      _eventLoop.processEvents();
+      QEventLoop eventLoop;
+      eventLoop.processEvents();
       usleep(0.005 * 1000000);
     }
 #if 1 // not sure if this is necessary? does ~_qnam() delete all its replies? i guess it should
@@ -101,6 +101,8 @@ public:
   //
   // - https://developers.google.com/analytics/devguides/collection/protocol/v1/devguide
   //
+
+public Q_SLOTS:
 
   // pageview
   void sendPageview(std::string docHostname, std::string page, std::string title) const {
@@ -182,6 +184,8 @@ public:
     params.addQueryItem("sc", "end");
     send_metric(params);
   }
+
+public:
 
   void generateUserAgentEtc() {
     QString system = QLocale::system().name().toLower().replace("_", "-");
@@ -292,6 +296,5 @@ private:
   // internal
   bool _isFail;
   mutable reply_map _replies;
-  QEventLoop _eventLoop;
 };
 
