@@ -1,7 +1,10 @@
 qt-google-analytics-collector
 =============================
 
-simple class to send google analytics statistics from qt apps
+simple class to send google analytics info from qt apps
+
+as described here:
+https://developers.google.com/analytics/devguides/collection/protocol/v1/devguide
 
 to build the example:
 
