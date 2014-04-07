@@ -8,7 +8,7 @@ https://developers.google.com/analytics/devguides/collection/protocol/v1/devguid
 
 to build the example:
 
-- edit main.cpp to set your own Google Analytics Client ID (ie UA-00000000-0)
+- edit main.cpp to set your own Google Analytics Tracking ID (ie UA-00000000-0)
 
 then
 
