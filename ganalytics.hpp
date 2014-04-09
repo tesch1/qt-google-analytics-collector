@@ -54,7 +54,6 @@
 class GAnalytics : public QObject {
   Q_OBJECT
 private:
-  typedef std::map<QNetworkReply *, bool> reply_map;
 public:
   GAnalytics(QCoreApplication * parent,
              QString trackingID,
@@ -82,13 +81,12 @@ public:
       qDebug() << "error: network inaccessible\n";
   }
   ~GAnalytics() {
-    // wait up to half a second to let replies finish up
     // this generally happens after the event-loop is done, so no more network processing
 #if 1 // not sure if this is necessary? does ~_qnam() delete all its replies? i guess it should
-    for (reply_map::iterator it = _replies.begin(); it != _replies.end(); it++) {
-      QNetworkReply * reply = it->first;
-      if (reply->isRunning())
-        qDebug() << "~GAnalytics, request still running: " << reply->url().toString() << ", aborting.";
+    QList<QNetworkReply *> replies = _qnam.findChildren<QNetworkReply *>();
+    for (QList<QNetworkReply *>::iterator it = replies.begin(); it != replies.end(); it++) {
+      if ((*it)->isRunning())
+        qDebug() << "~GAnalytics, request still running: " << (*it)->url().toString() << ", aborting.";
       //reply->deleteLater();
     }
 #endif
@@ -215,16 +213,17 @@ public:
 #ifdef Q_WS_WIN
     QString machine = "Windows; ";
 #endif
-    _userAgent = "Mozilla/5.0 (" + machine + "N; " + locale + ") GAnalytics/1.0 (Qt/" QT_VERSION_STR " )";
-    QNetworkRequest req;
-    qDebug() << "User-Agent:" << req.rawHeader("User-Agent").constData() << "->" << _userAgent;
-
+    _userAgent = "Mozilla/5.0 (" + machine + locale + ") GAnalytics/1.0 (Qt/" QT_VERSION_STR " )";
+    _userLanguage = locale;
 #ifdef QT_GUI_LIB
     QString geom = QString::number(QApplication::desktop()->screenGeometry().width()) 
       + "x" + QString::number(QApplication::desktop()->screenGeometry().height());
     _screenResolution = geom;
-    //qDebug() << "screen resolution:" << _screenResolution;
-    setUserLanguage(locale);
+#endif
+#if 0
+    qDebug() << "User-Agent:" << _userAgent;
+    qDebug() << "Language:" << _userLanguage;
+    qDebug() << "Screen Resolution:" << _screenResolution;
 #endif
   }
 
@@ -241,7 +240,6 @@ private Q_SLOTS:
         _isFail = true;
       }
     }
-    _replies.erase(reply);
     reply->deleteLater();
   }
   void postError(QNetworkReply::NetworkError code) {
@@ -292,7 +290,7 @@ private:
     }
     connect(reply, SIGNAL(error(QNetworkReply::NetworkError)), 
             this, SLOT(postError(QNetworkReply::NetworkError)));
-    _replies[reply] = true;
+    reply->setParent(&_qnam);
   }
   mutable QNetworkAccessManager _qnam;
   QString _trackingID;
@@ -328,6 +326,5 @@ private:
 
   // internal
   bool _isFail;
-  mutable reply_map _replies;
 };
 
