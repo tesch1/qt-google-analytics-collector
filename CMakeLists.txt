@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 2.8)
 project (ganalytics CXX)
 
-find_package ( Qt4 COMPONENTS QtCore QtNetwork REQUIRED )
+find_package ( Qt4 COMPONENTS QtCore QtNetwork QtGui REQUIRED )
 
 set (ganalytics_MOC_HDRS
   ganalytics.hpp

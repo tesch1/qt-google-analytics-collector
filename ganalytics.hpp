@@ -33,15 +33,17 @@
 */
 #include <unistd.h>
 #include <map>
+#include <QCoreApplication>
+#include <QSettings>
 #ifdef QT_GUI_LIB
 #include <QApplication>
 #include <QDesktopWidget>
 #endif
+#include <QUuid>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QUrl>
-#include <QEventLoop>
 #include <QDebug>
 
 /*!
@@ -54,38 +56,39 @@ class GAnalytics : public QObject {
 private:
   typedef std::map<QNetworkReply *, bool> reply_map;
 public:
-  GAnalytics(QString trackingID,
+  GAnalytics(QCoreApplication * parent,
+             QString trackingID,
              QString clientID = "",
              bool useGET = false)
-    : _qnam(this), _trackingID(trackingID), _clientID(clientID), _useGET(useGET), _isFail(false)
+    : QObject(parent), _qnam(this), _trackingID(trackingID), _clientID(clientID), _useGET(useGET), _isFail(false)
   {
+    if (parent) {
+      setAppName(parent->applicationName());
+      setAppVersion(parent->applicationVersion());
+#ifdef QT_GUI_LIB
+      parent->dumpObjectTree();
+#endif
+    }
+    if (!_clientID.size()) {
+      // load client id from settings
+      QSettings settings;
+      if (!settings.contains("GAnalytics-cid")) {
+        settings.setValue("GAnalytics-cid", QUuid::createUuid().toString());
+      }
+      _clientID = settings.value("GAnalytics-cid").toString();
+    }
     connect(&_qnam, SIGNAL(finished(QNetworkReply *)), this, SLOT(postFinished(QNetworkReply *)));
     if (!_qnam.networkAccessible())
       qDebug() << "error: network inaccessible\n";
   }
   ~GAnalytics() {
     // wait up to half a second to let replies finish up
-    for (int ii = 0; ii < 100; ii++) {
-      bool unfinished = false;
-      for (reply_map::iterator it = _replies.begin(); it != _replies.end(); it++) {
-        QNetworkReply * reply = it->first;
-        if (reply->isRunning()) {
-          unfinished = true;
-          break;
-        }
-      }
-      if (!unfinished)
-        break;
-      QEventLoop eventLoop;
-      eventLoop.processEvents();
-      usleep(0.005 * 1000000);
-    }
+    // this generally happens after the event-loop is done, so no more network processing
 #if 1 // not sure if this is necessary? does ~_qnam() delete all its replies? i guess it should
     for (reply_map::iterator it = _replies.begin(); it != _replies.end(); it++) {
       QNetworkReply * reply = it->first;
-      qDebug() << "~GAnalytics, request still running: " << reply->url().toString() << ", aborting.\n";
-      delete reply;
-      //reply->abort();
+      if (reply->isRunning())
+        qDebug() << "~GAnalytics, request still running: " << reply->url().toString() << ", aborting.";
       //reply->deleteLater();
     }
 #endif
@@ -95,6 +98,10 @@ public:
   void setUserIPAddr(QString userIPAddr) { _userIPAddr = userIPAddr; }
   void setUserAgent(QString userAgent) { _userAgent = userAgent; }
   void setAppName(QString appName) { _appName = appName; }
+  void setAppVersion(QString appVersion) { _appVersion = appVersion; }
+  void setScreenResolution(QString screenResolution) { _screenResolution = screenResolution; }
+  void setViewportSize(QString viewportSize) { _viewportSize = viewportSize; }
+  void setUserLanguage(QString userLanguage) { _userLanguage = userLanguage; }
   QString getClientID() const { return _clientID; }
   //
   // hit types
@@ -118,6 +125,7 @@ public Q_SLOTS:
                  QString eventLabel = "", int eventValue = 0) const {
     QUrl params = build_metric("event");
     if (_appName.size()) params.addQueryItem("an", _appName); // mobile event app tracking
+    if (_appVersion.size()) params.addQueryItem("av", _appVersion); // mobile event app tracking
     if (eventCategory.size()) params.addQueryItem("ec", eventCategory);
     if (eventAction.size()) params.addQueryItem("ea", eventAction);
     if (eventLabel.size()) params.addQueryItem("el", eventLabel);
@@ -168,11 +176,10 @@ public Q_SLOTS:
   // appview
   void sendAppview(QString appName, QString appVersion = "", QString screenName = "") const {
     QUrl params = build_metric("appview");
-    if (_appName.size())
-      params.addQueryItem("an", _appName); // mobile event app tracking
-    else if (!_appName.size())
-      params.addQueryItem("an", appName);
-    if (appVersion.size()) params.addQueryItem("av", appVersion);
+    if (_appName.size()) params.addQueryItem("an", _appName);
+    else if (appName.size()) params.addQueryItem("an", appName);
+    if (_appVersion.size()) params.addQueryItem("av", _appVersion);
+    else if (appVersion.size()) params.addQueryItem("av", appVersion);
     if (screenName.size()) params.addQueryItem("cd", screenName);
     send_metric(params);
   }
@@ -193,8 +200,14 @@ public Q_SLOTS:
 public:
 
   void generateUserAgentEtc() {
-    QString system = QLocale::system().name().toLower().replace("_", "-");
-    _userAgent = "Mozilla/5.0 (" + system + ")";
+    QString locale = QLocale::system().name().toLower().replace("_", "-");
+#if __APPLE__
+    QString machine = "Macintosh; Intel Mac OS X 10.9; ";
+#endif
+#if __linux__
+    QString machine = "X11; ";
+#endif
+    _userAgent = "Mozilla/5.0 (" + machine + "N; " + locale + ")";
     QNetworkRequest req;
     qDebug() << "User-Agent:" << req.rawHeader("User-Agent").constData() << "->" << _userAgent;
 
@@ -202,6 +215,8 @@ public:
     QString geom = QString::number(QApplication::desktop()->screenGeometry().width()) 
       + "x" + QString::number(QApplication::desktop()->screenGeometry().height());
     _screenResolution = geom;
+    //qDebug() << "screen resolution:" << _screenResolution;
+    setUserLanguage(locale);
 #endif
   }
 
@@ -213,9 +228,10 @@ private Q_SLOTS:
     }
     else {
       int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-      qDebug() << "http response code: " << httpStatus;
-      if (httpStatus < 200 || httpStatus > 299)
+      //qDebug() << "http response code: " << httpStatus;
+      if (httpStatus < 200 || httpStatus > 299) {
         _isFail = true;
+      }
     }
     _replies.erase(reply);
     reply->deleteLater();
@@ -239,6 +255,8 @@ private:
       params.addQueryItem("sr", _screenResolution);
     if (_viewportSize.size())
       params.addQueryItem("vp", _viewportSize);
+    if (_userLanguage.size())
+      params.addQueryItem("ul", _userLanguage);
     //if (_userAgent.size())
     //  params.addQueryItem("ua", _userAgent);
     return params;
@@ -281,6 +299,7 @@ private:
   QString _userIPAddr;
   QString _userAgent;
   QString _appName;
+  QString _appVersion;
 #if 0 // todo
   // traffic sources
   QString _documentReferrer;
@@ -296,6 +315,7 @@ private:
   // system info
   QString _screenResolution;
   QString _viewportSize;
+  QString _userLanguage;
   // etc...
 
   // internal
