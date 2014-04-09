@@ -201,13 +201,21 @@ public:
 
   void generateUserAgentEtc() {
     QString locale = QLocale::system().name().toLower().replace("_", "-");
-#if __APPLE__
+#ifdef __APPLE__
     QString machine = "Macintosh; Intel Mac OS X 10.9; ";
 #endif
-#if __linux__
-    QString machine = "X11; ";
+#ifdef __linux__
+    QString machine = "X11; Linux ";
+#ifdef __amd64__ || __x86_64__ || __ppc64__
+    machine += "x86_64; ";
+#else
+    machine += "i686; ";
 #endif
-    _userAgent = "Mozilla/5.0 (" + machine + "N; " + locale + ")";
+#endif
+#ifdef Q_WS_WIN
+    QString machine = "Windows; ";
+#endif
+    _userAgent = "Mozilla/5.0 (" + machine + "N; " + locale + ") GAnalytics/1.0 (Qt/" QT_VERSION_STR " )";
     QNetworkRequest req;
     qDebug() << "User-Agent:" << req.rawHeader("User-Agent").constData() << "->" << _userAgent;
 
