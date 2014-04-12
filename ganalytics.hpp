@@ -45,6 +45,7 @@
 #include <QNetworkReply>
 #include <QUrl>
 #include <QDebug>
+#include <QCryptographicHash>
 
 /*!
  * send google tracking data according to
@@ -97,7 +98,18 @@ public:
 
   // manual config of static fields
   void setClientID(QString clientID) { _clientID = clientID; }
-  void setUserID(QString userID) { _userID = userID; }
+  void setUserID(QString userID) {
+    if (userID.size())
+      _userID = userID;
+    else {
+#ifdef Q_WS_WIN
+      QString user = qgetenv("USERNAME");
+#else
+      QString user = qgetenv("USER");
+#endif
+      _userID = QCryptographicHash::hash(user.toUtf8(), QCryptographicHash::Md5).toHex();
+    }
+  }
   void setUserIPAddr(QString userIPAddr) { _userIPAddr = userIPAddr; }
   void setUserAgent(QString userAgent) { _userAgent = userAgent; }
   void setAppName(QString appName) { _appName = appName; }
