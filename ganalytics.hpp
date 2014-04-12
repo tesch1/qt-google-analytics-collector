@@ -221,12 +221,12 @@ public:
     QString machine = "Macintosh; Intel Mac OS X 10.9; ";
 #endif
 #ifdef __linux__
-    QString machine = "X11; Linux ";
-#if defined(__amd64__) || defined(__x86_64__) || defined(__ppc64__)
-    machine += "x86_64; ";
-#else
-    machine += "i686; ";
-#endif
+    QString machine = "X11; ";
+    QProcess process;
+    process.start("uname", QStringList() << "-sm");
+    process.waitForFinished(-1); // wait forever until finished
+    QString stdout = process.readAllStandardOutput();
+    machine += stdout;
 #endif
 #ifdef Q_WS_WIN
     QString machine = "Windows; ";
