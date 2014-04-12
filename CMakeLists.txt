@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.8)
+cmake_minimum_required (VERSION 2.6)
 project (ganalytics CXX)
 
 find_package ( Qt4 COMPONENTS QtCore QtNetwork QtGui REQUIRED )
