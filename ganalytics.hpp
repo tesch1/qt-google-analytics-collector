@@ -77,12 +77,15 @@ public:
       _clientID = settings.value("GAnalytics-cid").toString();
     }
     connect(&_qnam, SIGNAL(finished(QNetworkReply *)), this, SLOT(postFinished(QNetworkReply *)));
+#if QT_VERSION >= 0x040800
     if (!_qnam.networkAccessible())
       qDebug() << "error: network inaccessible\n";
+#endif
   }
+
   ~GAnalytics() {
     // this generally happens after the event-loop is done, so no more network processing
-#if 1 // not sure if this is necessary? does ~_qnam() delete all its replies? i guess it should
+#if 1
     QList<QNetworkReply *> replies = _qnam.findChildren<QNetworkReply *>();
     for (QList<QNetworkReply *>::iterator it = replies.begin(); it != replies.end(); it++) {
       if ((*it)->isRunning())
@@ -91,8 +94,10 @@ public:
     }
 #endif
   }
-  // manual ip and user agent
+
+  // manual config of static fields
   void setClientID(QString clientID) { _clientID = clientID; }
+  void setUserID(QString userID) { _userID = userID; }
   void setUserIPAddr(QString userIPAddr) { _userIPAddr = userIPAddr; }
   void setUserAgent(QString userAgent) { _userAgent = userAgent; }
   void setAppName(QString appName) { _appName = appName; }
@@ -101,6 +106,7 @@ public:
   void setViewportSize(QString viewportSize) { _viewportSize = viewportSize; }
   void setUserLanguage(QString userLanguage) { _userLanguage = userLanguage; }
   QString getClientID() const { return _clientID; }
+
   //
   // hit types
   //
@@ -204,7 +210,7 @@ public:
 #endif
 #ifdef __linux__
     QString machine = "X11; Linux ";
-#ifdef __amd64__ || __x86_64__ || __ppc64__
+#if defined(__amd64__) || defined(__x86_64__) || defined(__ppc64__)
     machine += "x86_64; ";
 #else
     machine += "i686; ";
@@ -255,6 +261,9 @@ private:
     params.addQueryItem("tid", _trackingID);
     params.addQueryItem("cid", _clientID);
     params.addQueryItem("t", hitType);
+    // optional
+    if (_userID.size())
+      params.addQueryItem("uid", _userID);
     if (_userIPAddr.size())
       params.addQueryItem("uip", _userIPAddr);
     if (_screenResolution.size())
