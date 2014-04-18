@@ -31,6 +31,7 @@
   https://github.com/tesch1/qt-google-analytics-collector
 
   to enable debugging messages, '#define GANALYTICS_DEBUG 1' before including this file
+  to get super verbose debugging, '#define GANALYTICS_DEBUG 2'
 */
 #include <unistd.h>
 #include <map>
@@ -52,6 +53,10 @@
  * send google tracking data according to
  * https://developers.google.com/analytics/devguides/collection/protocol/v1/reference
  */
+
+#ifndef GANALYTICS_DEBUG
+#define GANALYTICS_DEBUG 0
+#endif
 
 class GAnalytics : public QObject {
   Q_OBJECT
@@ -231,7 +236,7 @@ public:
       + "x" + QString::number(QApplication::desktop()->screenGeometry().height());
     _screenResolution = geom;
 #endif
-#if 0
+#if GANALYTICS_DEBUG > 1
     qDebug() << "User-Agent:" << _userAgent;
     qDebug() << "Language:" << _userLanguage;
     qDebug() << "Screen Resolution:" << _screenResolution;
@@ -307,6 +312,9 @@ private:
     }
     connect(reply, SIGNAL(error(QNetworkReply::NetworkError)), 
             this, SLOT(postError(QNetworkReply::NetworkError)));
+#if GANALYTICS_DEBUG > 1
+    qDebug() << "GAnalytics sent: " << params.toString();
+#endif
     reply->setParent(&_qnam);
   }
   mutable QNetworkAccessManager _qnam;
