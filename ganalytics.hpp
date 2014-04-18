@@ -30,6 +30,7 @@
 
   https://github.com/tesch1/qt-google-analytics-collector
 
+  to enable debugging messages, '#define GANALYTICS_DEBUG 1' before including this file
 */
 #include <unistd.h>
 #include <map>
@@ -45,7 +46,7 @@
 #include <QNetworkReply>
 #include <QUrl>
 #include <QDebug>
-#include <QCryptographicHash>
+#include <QProcess>
 
 /*!
  * send google tracking data according to
@@ -79,14 +80,16 @@ public:
     }
     connect(&_qnam, SIGNAL(finished(QNetworkReply *)), this, SLOT(postFinished(QNetworkReply *)));
 #if QT_VERSION >= 0x040800
+#if GANALYTICS_DEBUG
     if (!_qnam.networkAccessible())
       qDebug() << "error: network inaccessible\n";
+#endif
 #endif
   }
 
   ~GAnalytics() {
     // this generally happens after the event-loop is done, so no more network processing
-#if 1
+#if GANALYTICS_DEBUG
     QList<QNetworkReply *> replies = _qnam.findChildren<QNetworkReply *>();
     for (QList<QNetworkReply *>::iterator it = replies.begin(); it != replies.end(); it++) {
       if ((*it)->isRunning())
@@ -98,18 +101,7 @@ public:
 
   // manual config of static fields
   void setClientID(QString clientID) { _clientID = clientID; }
-  void setUserID(QString userID) {
-    if (userID.size())
-      _userID = userID;
-    else {
-#ifdef Q_WS_WIN
-      QString user = qgetenv("USERNAME");
-#else
-      QString user = qgetenv("USER");
-#endif
-      _userID = QCryptographicHash::hash(user.toUtf8(), QCryptographicHash::Md5).toHex();
-    }
-  }
+  void setUserID(QString userID) { _userID = userID; }
   void setUserIPAddr(QString userIPAddr) { _userIPAddr = userIPAddr; }
   void setUserAgent(QString userAgent) { _userAgent = userAgent; }
   void setAppName(QString appName) { _appName = appName; }
@@ -118,6 +110,7 @@ public:
   void setViewportSize(QString viewportSize) { _viewportSize = viewportSize; }
   void setUserLanguage(QString userLanguage) { _userLanguage = userLanguage; }
   QString getClientID() const { return _clientID; }
+  QString getUserAgent() const { return _userAgent; }
 
   //
   // hit types
@@ -226,7 +219,7 @@ public:
     process.start("uname", QStringList() << "-sm");
     process.waitForFinished(-1); // wait forever until finished
     QString stdout = process.readAllStandardOutput();
-    machine += stdout;
+    machine += stdout.simplified() + "; ";
 #endif
 #ifdef Q_WS_WIN
     QString machine = "Windows; ";
@@ -253,8 +246,11 @@ private Q_SLOTS:
     }
     else {
       int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-      //qDebug() << "http response code: " << httpStatus;
+      //qDebug() << "response code: " << httpStatus;
       if (httpStatus < 200 || httpStatus > 299) {
+#if GANALYTICS_DEBUG
+        qDebug() << "response code: " << httpStatus;
+#endif
         _isFail = true;
       }
     }
