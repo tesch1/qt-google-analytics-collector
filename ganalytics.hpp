@@ -32,15 +32,26 @@
 
   to enable debugging messages, '#define GANALYTICS_DEBUG 1' before including this file
   to get super verbose debugging, '#define GANALYTICS_DEBUG 2'
+
+  To build GAnalytics with QtQuick application (QGuiApplication) instead of Desktop,
+  define GANALYTICS_QTQUICK in your .pro file like this: 'DEFINES += GANALYTICS_QTQUICK',
+  or in cmake project: 'add_definitions(-DGANALYTICS_QTQUICK)'
 */
 #include <unistd.h>
 #include <map>
 #include <QCoreApplication>
 #include <QSettings>
+
+#if defined(GANALYTICS_QTQUICK)
+#include <QGuiApplication>
+#include <QScreen>
+#else
 #ifdef QT_GUI_LIB
 #include <QApplication>
 #include <QDesktopWidget>
 #endif
+#endif
+
 #include <QUuid>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
@@ -48,6 +59,15 @@
 #include <QUrl>
 #include <QDebug>
 #include <QProcess>
+#include <QList>
+#include <QEventLoop>
+
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QUrlQuery>
+#define URL_QUERY QUrlQuery
+#else
+#define URL_QUERY QUrl
+#endif
 
 /*!
  * send google tracking data according to
@@ -60,13 +80,14 @@
 
 class GAnalytics : public QObject {
   Q_OBJECT
-private:
+  Q_PROPERTY (bool isBusy READ isBusy NOTIFY busyChanged)
 public:
   GAnalytics(QCoreApplication * parent,
              QString trackingID,
              QString clientID = "",
              bool useGET = false)
     : QObject(parent), _qnam(this), _trackingID(trackingID), _clientID(clientID), _useGET(useGET), _isFail(false)
+    , _waitLoop()
   {
     if (parent) {
       setAppName(parent->applicationName());
@@ -83,7 +104,7 @@ public:
       }
       _clientID = settings.value("GAnalytics-cid").toString();
     }
-    connect(&_qnam, SIGNAL(finished(QNetworkReply *)), this, SLOT(postFinished(QNetworkReply *)));
+    connect(&_qnam, SIGNAL(finished(QNetworkReply *)), this, SLOT(replyFinished(QNetworkReply *)));
 #if QT_VERSION >= 0x040800
 #if GANALYTICS_DEBUG
     if (!_qnam.networkAccessible())
@@ -123,11 +144,14 @@ public:
   // - https://developers.google.com/analytics/devguides/collection/protocol/v1/devguide
   //
 
+  // query processing in progress
+  bool isBusy() const { return !_workingQueries.isEmpty(); }
+
 public Q_SLOTS:
 
   // pageview
-  void sendPageview(QString docHostname, QString page, QString title) const {
-    QUrl params = build_metric("pageview");
+  void sendPageview(QString docHostname, QString page, QString title) {
+    URL_QUERY params = build_metric("pageview");
     params.addQueryItem("dh", docHostname);    // document hostname
     params.addQueryItem("dp", page);            // page
     params.addQueryItem("dt", title);           // title
@@ -135,9 +159,11 @@ public Q_SLOTS:
   }
 
   // event
-  void sendEvent(QString eventCategory = "", QString eventAction = "", 
-                 QString eventLabel = "", int eventValue = 0) const {
-    QUrl params = build_metric("event");
+  void sendEvent(const QString& eventCategory = QString(),
+                 const QString& eventAction = QString(),
+                 const QString& eventLabel = QString(),
+                 int eventValue = 0) {
+    URL_QUERY params = build_metric("event");
     if (_appName.size()) params.addQueryItem("an", _appName); // mobile event app tracking
     if (_appVersion.size()) params.addQueryItem("av", _appVersion); // mobile event app tracking
     if (eventCategory.size()) params.addQueryItem("ec", eventCategory);
@@ -148,24 +174,24 @@ public Q_SLOTS:
   }
 
   // transaction
-  void sendTransaction(QString transactionID, QString transactionAffiliation = "" /*...todo...*/) const {
-    QUrl params = build_metric("transaction");
+  void sendTransaction(QString transactionID, QString transactionAffiliation = "" /*...todo...*/) {
+    URL_QUERY params = build_metric("transaction");
     params.addQueryItem("ti", transactionID);
     if (transactionAffiliation.size()) params.addQueryItem("ta", transactionAffiliation);
     send_metric(params);
   }
 
   // item
-  void sendItem(QString itemName) const {
-    QUrl params = build_metric("item");
+  void sendItem(QString itemName) {
+    URL_QUERY params = build_metric("item");
     params.addQueryItem("in", itemName);
     //if (appName.size()) params.addQueryItem("an", appName);
     send_metric(params);
   }
 
   // social
-  void sendSocial(QString socialNetwork, QString socialAction, QString socialActionTarget) const {
-    QUrl params = build_metric("social");
+  void sendSocial(QString socialNetwork, QString socialAction, QString socialActionTarget) {
+    URL_QUERY params = build_metric("social");
     params.addQueryItem("sn", socialNetwork);
     params.addQueryItem("sa", socialAction);
     params.addQueryItem("st", socialActionTarget);
@@ -173,29 +199,34 @@ public Q_SLOTS:
   }
 
   // exception
-  void sendException(QString exceptionDescription, bool exceptionFatal = true) const {
-    QUrl params = build_metric("exception");
+  void sendException(QString exceptionDescription, bool exceptionFatal = true) {
+    URL_QUERY params = build_metric("exception");
     if (exceptionDescription.size()) params.addQueryItem("exd", exceptionDescription);
     if (!exceptionFatal) params.addQueryItem("exf", "0");
     send_metric(params);
   }
 
   // timing
-  void sendTiming(/* todo */) const {
-    QUrl params = build_metric("timing");
+  void sendTiming(/* todo */) {
+    URL_QUERY params = build_metric("timing");
     //if (appName.size()) params.addQueryItem("an", appName);
     send_metric(params);
   }
 
   // appview
-  void sendAppview(QString appName, QString appVersion = "", QString screenName = "") const {
-    QUrl params = build_metric("appview");
-    if (_appName.size()) params.addQueryItem("an", _appName);
-    else if (appName.size()) params.addQueryItem("an", appName);
-    if (_appVersion.size()) params.addQueryItem("av", _appVersion);
-    else if (appVersion.size()) params.addQueryItem("av", appVersion);
+  void sendAppview2(const QString& screenName, const QString& appName = QString(), const QString& appVersion = QString()) {
+    URL_QUERY params = build_metric("appview");
+    if (!appName.isEmpty()) params.addQueryItem("an", appName);
+    else if (!_appName.isEmpty()) params.addQueryItem("an", _appName);
+    if (!appVersion.isEmpty()) params.addQueryItem("av", appVersion);
+    else if (!_appVersion.isEmpty()) params.addQueryItem("av", _appVersion);
     if (screenName.size()) params.addQueryItem("cd", screenName);
     send_metric(params);
+  }
+
+  // deprecated
+  void sendAppview(const QString& appName, const QString& appVersion = QString(), const QString& screenName = QString()) {
+    sendAppview2(screenName, appName, appVersion);
   }
 
   // custom dimensions / metrics
@@ -205,11 +236,30 @@ public Q_SLOTS:
   // todo
 
   //void startSession();
-  void endSession() const {
-    QUrl params = build_metric("event");
+
+  // To ensure that query was sent before application quit, call waitForIdle()
+  void endSession() {
+    URL_QUERY params = build_metric("event");
     params.addQueryItem("sc", "end");
     send_metric(params);
   }
+
+  // Waiting for any network operations complete. This method can be used with endSession
+  // to ensure that query was completed before application was closed.
+  void waitForIdle() {
+      if (_waitLoop) {
+          qCritical() << "Recursive call GAnalytics::waitForIdle";
+          return;
+      }
+
+      QEventLoop loop;
+      _waitLoop = &loop;
+      loop.exec(QEventLoop::ExcludeUserInputEvents);
+      _waitLoop = 0;
+  }
+
+signals:
+  void busyChanged();
 
 public:
 
@@ -226,15 +276,22 @@ public:
     QString stdout = process.readAllStandardOutput();
     machine += stdout.simplified() + "; ";
 #endif
-#ifdef Q_WS_WIN
+#if defined(Q_WS_WIN) || defined(Q_OS_WIN)
     QString machine = "Windows; ";
 #endif
     _userAgent = "Mozilla/5.0 (" + machine + locale + ") GAnalytics/1.0 (Qt/" QT_VERSION_STR " )";
     _userLanguage = locale;
+#if defined(GANALYTICS_QTQUICK)
+    QScreen* screen = qApp->primaryScreen();
+    QString geom = QString::number(screen->geometry().width())
+            + "x" + QString::number(screen->geometry().height());
+    _screenResolution = geom;
+#else
 #ifdef QT_GUI_LIB
-    QString geom = QString::number(QApplication::desktop()->screenGeometry().width()) 
+    QString geom = QString::number(QApplication::desktop()->screenGeometry().width())
       + "x" + QString::number(QApplication::desktop()->screenGeometry().height());
     _screenResolution = geom;
+#endif
 #endif
 #if GANALYTICS_DEBUG > 1
     qDebug() << "User-Agent:" << _userAgent;
@@ -244,10 +301,11 @@ public:
   }
 
 private Q_SLOTS:
-  void postFinished(QNetworkReply * reply) {
+
+  void replyFinished(QNetworkReply * reply) {
     //qDebug() << "reply:" << reply->readAll().toHex();
     if (QNetworkReply::NoError != reply->error()) {
-      qDebug() << "postFinished error: " << reply->errorString() << "\n";
+      qCritical() << "replyFinished error: " << reply->errorString() << "\n";
     }
     else {
       int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
@@ -259,16 +317,25 @@ private Q_SLOTS:
         _isFail = true;
       }
     }
+
+    _workingQueries.removeAll(reply);
+    if (_workingQueries.isEmpty()) {
+      emit busyChanged();
+      if (_waitLoop)
+        _waitLoop->exit();
+    }
+
     reply->deleteLater();
   }
-  void postError(QNetworkReply::NetworkError code) {
+
+  void replyError(QNetworkReply::NetworkError code) {
     qDebug() << "network error signal: " << code << "\n";
   }
 
 private:
   GAnalytics(const GAnalytics &); // disable copy const constructor
-  QUrl build_metric(QString hitType) const {
-    QUrl params;
+  URL_QUERY build_metric(const QString& hitType) const {
+    URL_QUERY params;
     // required in v1
     params.addQueryItem("v", "1" ); // version
     params.addQueryItem("tid", _trackingID);
@@ -289,7 +356,8 @@ private:
     //  params.addQueryItem("ua", _userAgent);
     return params;
   }
-  void send_metric(QUrl & params) const {
+
+  void send_metric(const URL_QUERY & params) {
     // when google has err'd us, then stop sending events!
     if (_isFail)
       return;
@@ -301,17 +369,31 @@ private:
     if (_useGET) {
       // add cache-buster "z" to params
       //params.addQueryItem("z", QString::number(qrand()) );
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+      collect_url.setQuery(params);
+#else
       collect_url.setQueryItems(params.queryItems());
+#endif
       request.setUrl(collect_url);
       reply = _qnam.get(request);
     }
     else {
       request.setUrl(collect_url);
       request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
-      reply = _qnam.post(request, params.encodedQuery());
+
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+      QByteArray postData = params.query(QUrl::FullyEncoded).toUtf8();
+#else
+      QByteArray postData = params.encodedQuery();
+#endif
+      reply = _qnam.post(request, postData);
     }
-    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)), 
-            this, SLOT(postError(QNetworkReply::NetworkError)));
+    _workingQueries << reply;
+    if (_workingQueries.size() == 1)
+        emit busyChanged();
+
+    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
+            this, SLOT(replyError(QNetworkReply::NetworkError)));
 #if GANALYTICS_DEBUG > 1
     qDebug() << "GAnalytics sent: " << params.toString();
 #endif
@@ -351,5 +433,8 @@ private:
 
   // internal
   bool _isFail;
+
+  QList<QNetworkReply*> _workingQueries;
+  QEventLoop* _waitLoop;
 };
 
