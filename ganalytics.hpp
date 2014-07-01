@@ -276,7 +276,7 @@ public:
     QString stdout = process.readAllStandardOutput();
     machine += stdout.simplified() + "; ";
 #endif
-#ifdef Q_WS_WIN
+#if defined(Q_WS_WIN) || defined(Q_OS_WIN)
     QString machine = "Windows; ";
 #endif
     _userAgent = "Mozilla/5.0 (" + machine + locale + ") GAnalytics/1.0 (Qt/" QT_VERSION_STR " )";
